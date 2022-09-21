@@ -1,54 +1,21 @@
-ifeq ($(ARCH),)
-ARCH := native
-endif
-CXXFLAGS += -Wall -Wextra -Werror -std=c++17 -Ofast -march=$(ARCH) -mtune=$(ARCH) -flto -fno-rtti -fno-exceptions -fgcse-sm -fgcse-las $(PGOFLAGS)
-version := $(shell date '+%Y%m%d')-$(shell git rev-parse --short HEAD)
-branch := $(shell git branch --show-current)
-ifneq ($(branch),main)
-version := $(version)-$(branch)
-endif
-release := out/seawall-$(version)$(SUFFIX)
-CPPFLAGS += -DSEAWALL_VERSION=$(version)
+TOOLCHAIN_TAG := 0.11.0
+TOOLCHAIN_IMG := cartesi/toolchain:$(TOOLCHAIN_TAG)
+CONTAINER_NAME := ctsi-riscv-build
+CONTAINER_BASE := /opt/ctsi-riscv-build
+TARGET_DIR := target
+CONTAINER_TARGET_DIR:= /opt/ctsi-riscv-build/seawall
 
-all:	test $(release)
+$(TARGET_DIR) &:
+	@if docker inspect $(CONTAINER_NAME) > /dev/null 2>&1; then \
+		docker rm -f $(CONTAINER_NAME) > /dev/null; \
+	fi
+	@docker run -w $(CONTAINER_BASE) -i -d --name $(CONTAINER_NAME) $(TOOLCHAIN_IMG) bash
+	
+	@docker cp . $(CONTAINER_NAME):$(CONTAINER_BASE)
+	@docker exec $(CONTAINER_NAME) ls
+	@docker exec $(CONTAINER_NAME) riscv64-cartesi-linux-gnu-g++ seawall.cc -pthread -std=c++17 -o seawall
+	@docker cp $(CONTAINER_NAME):$(CONTAINER_TARGET_DIR) seawall
+	@docker rm -f $(CONTAINER_NAME) > /dev/null
+	@echo "$(TARGET_DIR): OK"
+	
 
-ifneq ($(branch),)
-branchlink := branches/seawall-$(branch)
-
-all:	$(branchlink)
-
-$(branchlink):	$(release) branches
-	ln -s -f ../$(release) $(branchlink)
-endif
-
-$(release):	seawall out
-	cp $< $@
-
-seawall:	seawall.cc profile
-	$(RM) profile/*
-	$(MAKE) PGOFLAGS=-fprofile-generate=./profile profile/seawall
-	./profile.sh profile/seawall
-	$(RM) profile/seawall
-	$(MAKE) PGOFLAGS=-fprofile-use=./profile profile/seawall
-	mv profile/seawall $@
-
-profile/seawall:	seawall.cc
-	$(LINK.cc) $^ -o $@
-
-branches out profile:
-	mkdir -p $@
-
-test:	seawall
-	./test.sh
-
-tune:	seawall.tune
-	cat samples/*.csv | ./seawall.tune
-
-seawall.tune:	CPPFLAGS += -DTUNE=1
-seawall.tune:	seawall.cc
-	$(LINK.cc) $^ -o $@
-
-clean:
-	$(RM) -r seawall seawall.tune profile
-
-.PHONY:	all test tune clean

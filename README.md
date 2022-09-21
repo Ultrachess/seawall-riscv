@@ -8,6 +8,11 @@ Some ideas have been borrowed more directly than others; the obstruction differe
 from [Chess Movegen], while the use of a low pass filter and capture history for move ordering were borrowed from
 [Stockfish].
 
+Run 
+"
+sudo make --always-make
+"
+
 [uci]: https://www.chessprogramming.org/UCI
 [chess movegen]: https://github.com/Gigantua/Chess_Movegen
 [stockfish]: https://github.com/official-stockfish/Stockfish
